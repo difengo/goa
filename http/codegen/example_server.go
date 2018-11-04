@@ -40,7 +40,7 @@ func dummyServiceFile(genpkg string, root *httpdesign.RootExpr, svc *httpdesign.
 			{Path: "context"},
 			{Path: "log"},
 			{Path: "mime/multipart"},
-			{Path: "github.com/opentracing/opentracing-go", Name: "tracing"},
+			{Path: "github.com/opentracing/opentracing-go", Name: "opentracing"},
 			{Path: genpkg + "/" + codegen.SnakeCase(svc.Name()), Name: data.Service.PkgName},
 		}),
 		{
@@ -100,7 +100,7 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 		{Path: "goa.design/goa/http", Name: "goahttp"},
 		{Path: "goa.design/goa/http/middleware"},
 		{Path: "github.com/gorilla/websocket"},
-		{Path: "github.com/opentracing/opentracing-go", Name: "tracing"},
+		{Path: "github.com/opentracing/opentracing-go", Name: "opentracing"},
 		{Path: rootPath, Name: apiPkg},
 	}
 	for _, svc := range root.HTTPServices {
@@ -129,9 +129,67 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 		"APIPkg":      apiPkg,
 		"DefaultHost": u.Host,
 	}
+
+	// Service Main sections
 	sections = append(sections, &codegen.SectionTemplate{
-		Name:    "service-main",
-		Source:  mainT,
+		Name:    "service-main-start",
+		Source:  mainStartT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-logger",
+		Source:  mainLoggerT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-struct",
+		Source:  mainStructT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-endpoints",
+		Source:  mainEndpointsT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-mux",
+		Source:  mainEncoderMuxT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-middleware",
+		Source:  mainMiddlewareT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-http",
+		Source:  mainHTTPT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-end",
+		Source:  mainEndT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-errorhandler",
+		Source:  mainErrorHandlerT,
 		Data:    data,
 		FuncMap: map[string]interface{}{"needStream": needStream},
 	})
@@ -158,12 +216,11 @@ func needStream(data []*ServiceData) bool {
 const dummyServiceStructT = `{{ printf "%s service example implementation.\nThe example methods log the requests and return zero values." .Service.Name | comment }}
 type {{ .Service.VarName }}Svc struct {
 	logger *log.Logger
-	tracer tracing.Tracer
 }
 
 {{ printf "New%s returns the %s service implementation." .Service.StructName .Service.Name | comment }}
-func New{{ .Service.StructName }}(logger *log.Logger, tracer tracing.Tracer) {{ .Service.PkgName }}.Service {
-	return &{{ .Service.VarName }}Svc{logger, tracer}
+func New{{ .Service.StructName }}(logger *log.Logger) {{ .Service.PkgName }}.Service {
+	return &{{ .Service.VarName }}Svc{logger}
 }
 `
 
@@ -174,7 +231,7 @@ func (s *{{ .ServiceVarName }}Svc) {{ .Method.VarName }}(ctx context.Context{{ i
 {{- else }}
 func (s *{{ .ServiceVarName }}Svc) {{ .Method.VarName }}(ctx context.Context{{ if .Payload.Ref }}, p {{ .Payload.Ref }}{{ end }}) ({{ if .Result.Ref }}res {{ .Result.Ref }}, {{ if .Method.ViewedResult }}{{ if not .Method.ViewedResult.ViewName }}view string, {{ end }}{{ end }} {{ end }}err error) {
 {{- end }}
-	span := s.tracer.StartSpan("{{ .Method.VarName }}")
+	span, _ := opentracing.StartSpanFromContext(ctx, "{{ .Method.VarName }}")
 	defer span.Finish()
 {{- if and (and .Result.Ref .Result.IsStruct) (not .ServerStream) }}
 	res = &{{ .Result.Name }}{}
@@ -207,8 +264,7 @@ func {{ .FuncName }}(mw *multipart.Writer, p {{ .Payload.Ref }}) error {
 }
 `
 
-// input: map[string]interface{}{"Services":[]ServiceData, "APIPkg": string, "DefaultHost": string}
-const mainT = `func main() {
+const mainStartT = `func main() {
 	// Define command line flags, add any other flag required to configure
 	// the service.
 	var (
@@ -216,7 +272,9 @@ const mainT = `func main() {
 		dbg  = flag.Bool("debug", false, "Log request and response bodies")
 	)
 	flag.Parse()
+`
 
+const mainLoggerT = `
 	// Setup logger and goa log adapter. Replace logger with your own using
 	// your log package of choice.
 	var (
@@ -227,15 +285,9 @@ const mainT = `func main() {
 		logger = log.New(os.Stderr, "[{{ .APIPkg }}] ", log.Ltime)
 		logAdapter = middleware.NewLogger(logger)
 	}
+`
 
-	// Setup tracer and goa tracer adapter
-	var (
-		tracer tracing.Tracer
-	)
-	{
-		tracer = tracing.GlobalTracer()
-	}
-
+const mainStructT = `
 	// Create the structs that implement the services.
 	var (
 	{{- range .Services }}
@@ -247,11 +299,13 @@ const mainT = `func main() {
 	{
 	{{- range .Services }}
 		{{-  if .Endpoints }}
-		{{ .Service.VarName }}Svc = {{ $.APIPkg }}.New{{ .Service.StructName }}(logger, tracer)
+		{{ .Service.VarName }}Svc = {{ $.APIPkg }}.New{{ .Service.StructName }}(logger)
 		{{-  end }}
 	{{- end }}
 	}
+`
 
+const mainEndpointsT = `
 	// Wrap the services in endpoints that can be invoked from other
 	// services potentially running in different processes.
 	var (
@@ -268,7 +322,9 @@ const mainT = `func main() {
 		{{-  end }}
 	{{- end }}
 	}
+`
 
+const mainEncoderMuxT = `
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
 	// Other encodings can be used by providing the corresponding functions,
@@ -311,8 +367,10 @@ const mainT = `func main() {
 	// Configure the mux.
 	{{- range .Services }}
 	{{ .Service.PkgName }}svr.Mount(mux{{ if .Endpoints }}, {{ .Service.VarName }}Server{{ end }})
-	{{- end }}
+	{{- end }} 
+`
 
+const mainMiddlewareT = `
 	// Wrap the multiplexer with additional middlewares. Middlewares mounted
 	// here apply to all the service endpoints.
 	var handler http.Handler = mux
@@ -322,8 +380,11 @@ const mainT = `func main() {
 		}
 		handler = middleware.Log(logAdapter)(handler)
 		handler = middleware.RequestID()(handler)
+		handler = middleware.OpenTracing()(handler)
 	}
+`
 
+const mainHTTPT = `
 	// Create channel used by both the signal handler and server goroutines
 	// to notify the main goroutine when to stop the server.
 	errc := make(chan error)
@@ -352,7 +413,9 @@ const mainT = `func main() {
 		logger.Printf("listening on %s", *addr)
 		errc <- srv.ListenAndServe()
 	}()
+`
 
+const mainEndT = `
 	// Wait for signal.
 	logger.Printf("exiting (%v)", <-errc)
 
@@ -363,7 +426,9 @@ const mainT = `func main() {
 
 	logger.Println("exited")
 }
+`
 
+const mainErrorHandlerT = `
 // ErrorHandler returns a function that writes and logs the given error.
 // The function also writes and logs the error unique ID so that it's possible
 // to correlate.
