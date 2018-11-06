@@ -27,15 +27,14 @@ func main() {
 	flag.Parse()
 
 	// Setup logger and goa log adapter. Replace logger with your own using
-	// your log package of choice. The goa.design/middleware/logging/...
-	// packages define log adapters for common log packages.
+	// your log package of choice.
 	var (
-		adapter middleware.Logger
-		logger  *log.Logger
+		logAdapter middleware.Logger
+		logger     *log.Logger
 	)
 	{
 		logger = log.New(os.Stderr, "[multiauth] ", log.Ltime)
-		adapter = middleware.NewLogger(logger)
+		logAdapter = middleware.NewLogger(logger)
 	}
 
 	// Create the structs that implement the services.
@@ -93,7 +92,7 @@ func main() {
 		if *dbg {
 			handler = middleware.Debug(mux, os.Stdout)(handler)
 		}
-		handler = middleware.Log(adapter)(handler)
+		handler = middleware.Log(logAdapter)(handler)
 		handler = middleware.RequestID()(handler)
 	}
 

@@ -65,6 +65,10 @@ type (
 		ViewedResultTypes []*ViewedResultTypeData
 		// Scope initialized with all the service types.
 		Scope *codegen.NameScope
+		// Traced defines if the service is traced
+		Traced bool
+		// TracingEndpoint defines the host used to send the traces to
+		TracingEndpoint string
 	}
 
 	// ErrorInitData describes an error returned by a service method of type
@@ -143,6 +147,8 @@ type (
 		// ClientStream indicates that the service method receives a result
 		// stream or sends a payload result or both.
 		ClientStream *StreamData
+		// Traced defines if the service method is traced
+		Traced bool
 	}
 
 	// StreamData is the data used to generate client and server interfaces that
@@ -255,6 +261,8 @@ type (
 		Flows []*design.FlowExpr
 		// In indicates the request element that holds the credential.
 		In string
+		// Traced defines if the generated security method is traced.
+		Traced bool
 	}
 
 	// ViewedResultTypeData contains the data used to generate a viewed result type
@@ -536,6 +544,17 @@ func (d ServicesData) analyze(service *design.ServiceExpr) *Data {
 		}
 	}
 
+	var (
+		traced          bool
+		tracingEndpoint string
+	)
+	{
+		if service.Tracing != nil {
+			traced = true
+			tracingEndpoint = service.Tracing.Endpoint
+		}
+	}
+
 	data := &Data{
 		Name:              service.Name,
 		Description:       desc,
@@ -551,6 +570,8 @@ func (d ServicesData) analyze(service *design.ServiceExpr) *Data {
 		ProjectedTypes:    projTypes,
 		ViewedResultTypes: viewedRTs,
 		Scope:             scope,
+		Traced:            traced,
+		TracingEndpoint:   tracingEndpoint,
 	}
 	d[service.Name] = data
 
@@ -774,6 +795,7 @@ func buildMethodData(m *design.MethodExpr, svcPkgName string, scope *codegen.Nam
 		Schemes:              schemes,
 		ServerStream:         svrStream,
 		ClientStream:         cliStream,
+		Traced:               m.Traced,
 	}
 }
 
@@ -799,6 +821,7 @@ func buildSchemeData(s *design.SchemeExpr, m *design.MethodExpr) *SchemeData {
 			PasswordField:    pass,
 			PasswordPointer:  m.Payload.IsPrimitivePointer(passAtt, true),
 			PasswordRequired: m.Payload.IsRequired(passAtt),
+			Traced:           s.Traced,
 		}
 	case design.APIKeyKind:
 		if keyAtt := design.TaggedAttribute(m.Payload, "security:apikey:"+s.SchemeName); keyAtt != "" {
@@ -812,6 +835,7 @@ func buildSchemeData(s *design.SchemeExpr, m *design.MethodExpr) *SchemeData {
 				CredRequired: m.Payload.IsRequired(keyAtt),
 				KeyAttr:      keyAtt,
 				In:           s.In,
+				Traced:       s.Traced,
 			}
 		}
 	case design.JWTKind:
@@ -834,6 +858,7 @@ func buildSchemeData(s *design.SchemeExpr, m *design.MethodExpr) *SchemeData {
 				KeyAttr:      keyAtt,
 				Scopes:       scopes,
 				In:           s.In,
+				Traced:       s.Traced,
 			}
 		}
 	case design.OAuth2Kind:
@@ -857,6 +882,7 @@ func buildSchemeData(s *design.SchemeExpr, m *design.MethodExpr) *SchemeData {
 				Scopes:       scopes,
 				Flows:        s.Flows,
 				In:           s.In,
+				Traced:       s.Traced,
 			}
 		}
 	}

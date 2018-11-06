@@ -71,6 +71,8 @@ type (
 		Flows []*FlowExpr
 		// Metadata is a list of key/value pairs
 		Metadata MetadataExpr
+		// Traced defines if the generated security method is traced.
+		Traced bool
 	}
 
 	// FlowExpr describes a specific OAuth2 flow.
@@ -115,6 +117,7 @@ func DupScheme(sch *SchemeExpr) *SchemeExpr {
 		Scopes:      sch.Scopes,
 		Flows:       sch.Flows,
 		Metadata:    sch.Metadata,
+		Traced:      sch.Traced,
 	}
 	return &dup
 }

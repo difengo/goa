@@ -35,14 +35,21 @@ func dummyServiceFile(genpkg string, root *httpdesign.RootExpr, svc *httpdesign.
 	path := codegen.SnakeCase(svc.Name()) + ".go"
 	data := HTTPServices.Get(svc.Name())
 	apiPkg := strings.ToLower(codegen.Goify(root.Design.API.Name, false))
+	imports := []*codegen.ImportSpec{
+		{Path: "context"},
+		{Path: "log"},
+		{Path: "mime/multipart"},
+		{Path: genpkg + "/" + codegen.SnakeCase(svc.Name()), Name: data.Service.PkgName},
+	}
+
+	if svc.Tracing() != nil {
+		imports = append(imports, &codegen.ImportSpec{
+			Path: "github.com/opentracing/opentracing-go",
+			Name: "opentracing"})
+	}
+
 	sections := []*codegen.SectionTemplate{
-		codegen.Header("", apiPkg, []*codegen.ImportSpec{
-			{Path: "context"},
-			{Path: "log"},
-			{Path: "mime/multipart"},
-			{Path: "github.com/opentracing/opentracing-go", Name: "opentracing"},
-			{Path: genpkg + "/" + codegen.SnakeCase(svc.Name()), Name: data.Service.PkgName},
-		}),
+		codegen.Header("", apiPkg, imports),
 		{
 			Name:   "dummy-service",
 			Source: dummyServiceStructT,
@@ -100,9 +107,11 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 		{Path: "goa.design/goa/http", Name: "goahttp"},
 		{Path: "goa.design/goa/http/middleware"},
 		{Path: "github.com/gorilla/websocket"},
-		{Path: "github.com/opentracing/opentracing-go", Name: "opentracing"},
 		{Path: rootPath, Name: apiPkg},
 	}
+
+	traced := false
+
 	for _, svc := range root.HTTPServices {
 		pkgName := HTTPServices.Get(svc.Name()).Service.PkgName
 		specs = append(specs, &codegen.ImportSpec{
@@ -113,7 +122,19 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 			Path: path.Join(genpkg, codegen.SnakeCase(svc.Name())),
 			Name: pkgName,
 		})
+
+		if svc.Tracing() != nil {
+			traced = true
+		}
 	}
+
+	if traced {
+		specs = append(specs, &codegen.ImportSpec{
+			Path: "github.com/opentracing/opentracing-go",
+			Name: "opentracing",
+		})
+	}
+
 	sections := []*codegen.SectionTemplate{codegen.Header("", "main", specs)}
 	svcdata := make([]*ServiceData, len(svr.Services))
 	for i, svc := range svr.Services {
@@ -128,6 +149,7 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 		"Services":    svcdata,
 		"APIPkg":      apiPkg,
 		"DefaultHost": u.Host,
+		"Traced":      traced,
 	}
 
 	// Service Main sections
@@ -231,8 +253,10 @@ func (s *{{ .ServiceVarName }}Svc) {{ .Method.VarName }}(ctx context.Context{{ i
 {{- else }}
 func (s *{{ .ServiceVarName }}Svc) {{ .Method.VarName }}(ctx context.Context{{ if .Payload.Ref }}, p {{ .Payload.Ref }}{{ end }}) ({{ if .Result.Ref }}res {{ .Result.Ref }}, {{ if .Method.ViewedResult }}{{ if not .Method.ViewedResult.ViewName }}view string, {{ end }}{{ end }} {{ end }}err error) {
 {{- end }}
-	span, _ := opentracing.StartSpanFromContext(ctx, "{{ .Method.VarName }}")
+{{- if and .ServiceTraced .Method.Traced }}
+	span, _ := opentracing.StartSpanFromContext(ctx, "{{ .ServiceVarName }}.{{ .Method.VarName }}")
 	defer span.Finish()
+{{- end }}
 {{- if and (and .Result.Ref .Result.IsStruct) (not .ServerStream) }}
 	res = &{{ .Result.Name }}{}
 {{- end }}
@@ -380,7 +404,9 @@ const mainMiddlewareT = `
 		}
 		handler = middleware.Log(logAdapter)(handler)
 		handler = middleware.RequestID()(handler)
+		{{- if .Traced }}
 		handler = middleware.OpenTracing()(handler)
+		{{- end }}
 	}
 `
 

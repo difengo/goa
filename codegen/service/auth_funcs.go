@@ -39,13 +39,32 @@ func AuthFuncsFile(genpkg string, root *design.RootExpr) *codegen.File {
 			{Path: "goa.design/goa/security"},
 			{Path: rootPath, Name: apiPkg},
 		}
+
+		traced := false
 		for _, svc := range root.Services {
 			pkgName := Services.Get(svc.Name).PkgName
+			schemes := Services.Get(svc.Name).Schemes
 			specs = append(specs, &codegen.ImportSpec{
 				Path: path.Join(genpkg, codegen.SnakeCase(svc.Name)),
 				Name: pkgName,
 			})
+
+			if svc.Tracing != nil {
+				for _, sc := range schemes {
+					if sc.Traced {
+						traced = true
+						break
+					}
+				}
+			}
 		}
+
+		if traced {
+			specs = append(specs, &codegen.ImportSpec{
+				Path: "github.com/opentracing/opentracing-go",
+				Name: "opentracing"})
+		}
+
 		header := codegen.Header("", apiPkg, specs)
 		sections = []*codegen.SectionTemplate{header}
 		for _, s := range root.Services {
@@ -75,6 +94,13 @@ func AuthFuncsFile(genpkg string, root *design.RootExpr) *codegen.File {
 const dummyAuthFuncsT = `{{ range .Schemes }}
 {{ printf "%sAuth implements the authorization logic for service %q for the %q security scheme." .Type $.Name .SchemeName | comment }}
 func (s *{{ $.VarName }}Svc) {{ .Type }}Auth(ctx context.Context, {{ if eq .Type "Basic" }}user, pass{{ else if eq .Type "APIKey" }}key{{ else }}token{{ end }} string, scheme *security.{{ .Type }}Scheme) (context.Context, error) {
+	
+	{{- if .Traced }}
+	
+	span, _ := opentracing.StartSpanFromContext(ctx, "{{ $.VarName }}Svc.{{ .Type }}Auth")
+	defer span.Finish()
+	{{- end }}
+
 	//
 	// TBD: add authorization logic.
 	//
@@ -89,6 +115,7 @@ func (s *{{ $.VarName }}Svc) {{ .Type }}Auth(ctx context.Context, {{ if eq .Type
 	//
 	//    return ctx, goa.PermanentError("unauthorized", "invalid token")
 	//
+	
 	return ctx, fmt.Errorf("not implemented")
 }
 {{- end }}

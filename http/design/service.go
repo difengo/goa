@@ -54,6 +54,11 @@ func (svc *ServiceExpr) Description() string {
 	return svc.ServiceExpr.Description
 }
 
+// Tracing configuration of service (service)
+func (svc *ServiceExpr) Tracing() *design.TracingExpr {
+	return svc.ServiceExpr.Tracing
+}
+
 // Error returns the error with the given name.
 func (svc *ServiceExpr) Error(name string) *design.ErrorExpr {
 	for _, erro := range svc.ServiceExpr.Errors {

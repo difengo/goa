@@ -29,6 +29,8 @@ type (
 		// Metadata is a set of key/value pairs with semantic that is
 		// specific to each generator.
 		Metadata MetadataExpr
+		// Tracing contains the tracing configuration for the service
+		Tracing *TracingExpr
 	}
 
 	// ErrorExpr defines an error response. It consists of a named

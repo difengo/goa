@@ -1577,6 +1577,34 @@ func Token(name string, args ...interface{}) {
 	dsl.Token(name, args...)
 }
 
+// Traced defines if the associated method is traced.
+//
+// Traced is optional in Method or Security Scheme definitions.
+//
+// Traced takes no argument.
+//
+// Example:
+//
+//    Traced()
+//
+func Traced() {
+	dsl.Traced()
+}
+
+// Tracing defines the tracing configuration for the service.
+//
+// Tracing is optional in Service definition.
+//
+// Tracing takes 1 argument: the host/endpoint to send the traces to.
+//
+// Example:
+//
+//    Tracing("localhost:5775")
+//
+func Tracing(endpoint string) {
+	dsl.Tracing(endpoint)
+}
+
 // Type defines a user type. A user type has a unique name and may be an alias
 // to an existing type or may describe a completely new type using a list of
 // attributes (object fields). Attribute types may themselves be user type.

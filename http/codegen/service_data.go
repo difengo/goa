@@ -91,6 +91,8 @@ type (
 		ServiceVarName string
 		// ServicePkgName is the name of the service package.
 		ServicePkgName string
+		// ServiceTraced defines if the service is traced.
+		ServiceTraced bool
 		// Payload describes the method HTTP payload.
 		Payload *PayloadData
 		// Result describes the method HTTP result.
@@ -111,6 +113,8 @@ type (
 		// apply to the method and are encoded in the request query
 		// string.
 		QuerySchemes []*service.SchemeData
+		// Traced defines if this endpoint is traced
+		Traced bool
 
 		// server
 
@@ -777,6 +781,7 @@ func (d ServicesData) analyze(hs *httpdesign.ServiceExpr) *ServiceData {
 			ServiceName:     svc.Name,
 			ServiceVarName:  svc.VarName,
 			ServicePkgName:  svc.PkgName,
+			ServiceTraced:   svc.Traced,
 			Payload:         payload,
 			Result:          buildResultData(a, rd),
 			Errors:          buildErrorsData(a, rd),
@@ -795,6 +800,7 @@ func (d ServicesData) analyze(hs *httpdesign.ServiceExpr) *ServiceData {
 			RequestInit:     requestInit,
 			RequestEncoder:  requestEncoder,
 			ResponseDecoder: fmt.Sprintf("Decode%sResponse", ep.VarName),
+			Traced:          svc.Traced,
 		}
 		buildStreamData(ad, a, rd)
 

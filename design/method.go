@@ -40,6 +40,8 @@ type (
 		Stream StreamKind
 		// StreamingPayload is the payload sent across the stream.
 		StreamingPayload *AttributeExpr
+		// Defines if the method is traced
+		Traced bool
 	}
 )
 
