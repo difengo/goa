@@ -111,6 +111,7 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 	}
 
 	traced := false
+	tracingEndpoint := ""
 
 	for _, svc := range root.HTTPServices {
 		pkgName := HTTPServices.Get(svc.Name()).Service.PkgName
@@ -125,6 +126,7 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 
 		if svc.Tracing() != nil {
 			traced = true
+			tracingEndpoint = svc.Tracing().Endpoint
 		}
 	}
 
@@ -146,10 +148,11 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 	// URIs have been validated by DSL.
 	u, _ := url.Parse(string(root.Design.API.Servers[0].Hosts[0].URIs[0]))
 	data := map[string]interface{}{
-		"Services":    svcdata,
-		"APIPkg":      apiPkg,
-		"DefaultHost": u.Host,
-		"Traced":      traced,
+		"Services":        svcdata,
+		"APIPkg":          apiPkg,
+		"DefaultHost":     u.Host,
+		"Traced":          traced,
+		"TracingEndpoint": tracingEndpoint, // To be used by tracing plugins
 	}
 
 	// Service Main sections
