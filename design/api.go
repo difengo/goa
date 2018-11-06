@@ -31,6 +31,8 @@ type (
 		Docs *DocsExpr
 		// Metadata is a list of key/value pairs.
 		Metadata MetadataExpr
+		// Tracing defines the tracing configuration for the server.
+		Tracing *TracingExpr
 
 		// random generator used to build examples for the API types.
 		random *Random
@@ -109,6 +111,7 @@ func (a *APIExpr) DefaultServer() *ServerExpr {
 			ServerName: a.Name,
 			URIs:       []URIExpr{URIExpr("http://localhost:80"), URIExpr("grpc://localhost:8080")},
 		}},
+		Tracing: a.Tracing,
 	}
 }
 

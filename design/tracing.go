@@ -9,8 +9,6 @@ type (
 	TracingExpr struct {
 		// Endpoint used to send the traces to.
 		Endpoint string
-		// Service that owns this tracing.
-		Service *ServiceExpr
 	}
 )
 
@@ -22,8 +20,6 @@ func (m *TracingExpr) EvalName() string {
 	} else {
 		suffix = "undefined tracing endpoint"
 	}
-	if m.Service != nil {
-		prefix = m.Service.EvalName() + " "
-	}
+	prefix = "server "
 	return prefix + suffix
 }

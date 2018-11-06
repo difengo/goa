@@ -18,6 +18,8 @@ import (
 func Traced() {
 
 	switch expr := eval.Current().(type) {
+	case *design.ServiceExpr:
+		expr.Traced = true
 	case *design.MethodExpr:
 		expr.Traced = true
 	case *design.SchemeExpr:

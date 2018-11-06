@@ -41,6 +41,8 @@ type (
 		// Metadata is a set of key/value pairs with semantic that is
 		// specific to each generator.
 		Metadata design.MetadataExpr
+		// Traced defines if the service is traced.
+		Traced bool
 	}
 )
 
@@ -52,11 +54,6 @@ func (svc *ServiceExpr) Name() string {
 // Description of service (service)
 func (svc *ServiceExpr) Description() string {
 	return svc.ServiceExpr.Description
-}
-
-// Tracing configuration of service (service)
-func (svc *ServiceExpr) Tracing() *design.TracingExpr {
-	return svc.ServiceExpr.Tracing
 }
 
 // Error returns the error with the given name.

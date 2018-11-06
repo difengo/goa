@@ -49,7 +49,7 @@ func AuthFuncsFile(genpkg string, root *design.RootExpr) *codegen.File {
 				Name: pkgName,
 			})
 
-			if svc.Tracing != nil {
+			if svc.Traced {
 				for _, sc := range schemes {
 					if sc.Traced {
 						traced = true

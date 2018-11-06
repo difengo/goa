@@ -78,6 +78,8 @@ type (
 		// ClientTransformHelpers is the list of transform functions
 		// required by the various client side constructors.
 		ClientTransformHelpers []*codegen.TransformFunctionData
+		// Traced defines if the service is traced.
+		Traced bool
 	}
 
 	// EndpointData contains the data used to render the code related to a
@@ -600,6 +602,7 @@ func (d ServicesData) analyze(hs *httpdesign.ServiceExpr) *ServiceData {
 		ClientStruct:     "Client",
 		ServerTypeNames:  make(map[string]bool),
 		ClientTypeNames:  make(map[string]bool),
+		Traced:           hs.Traced,
 	}
 
 	for _, s := range hs.FileServers {

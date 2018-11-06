@@ -1591,9 +1591,9 @@ func Traced() {
 	dsl.Traced()
 }
 
-// Tracing defines the tracing configuration for the service.
+// Tracing defines the tracing configuration for the server.
 //
-// Tracing is optional in Service definition.
+// Tracing is optional in Server definition.
 //
 // Tracing takes 1 argument: the host/endpoint to send the traces to.
 //

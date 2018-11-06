@@ -23,6 +23,8 @@ type (
 		Services []string
 		// Hosts list the server hosts.
 		Hosts []*HostExpr
+		// Tracing defines the tracing configuration for the server.
+		Tracing *TracingExpr
 	}
 
 	// HostExpr describes a server host.

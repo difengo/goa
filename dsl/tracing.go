@@ -5,9 +5,9 @@ import (
 	"goa.design/goa/eval"
 )
 
-// Tracing defines the tracing configuration for the service.
+// Tracing defines the tracing configuration for the server.
 //
-// Tracing is optional in Service definition.
+// Tracing is optional in Server definition.
 //
 // Tracing takes 1 argument: the host/endpoint to send the traces to.
 //
@@ -16,11 +16,13 @@ import (
 //    Tracing("localhost:5775")
 //
 func Tracing(endpoint string) {
-	s, ok := eval.Current().(*design.ServiceExpr)
-	if !ok {
+
+	switch expr := eval.Current().(type) {
+	case *design.APIExpr:
+		expr.Tracing = &design.TracingExpr{Endpoint: endpoint}
+	case *design.ServerExpr:
+		expr.Tracing = &design.TracingExpr{Endpoint: endpoint}
+	default:
 		eval.IncompatibleDSL()
-		return
 	}
-	ep := &design.TracingExpr{Endpoint: endpoint, Service: s}
-	s.Tracing = ep
 }

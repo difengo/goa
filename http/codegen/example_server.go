@@ -42,7 +42,7 @@ func dummyServiceFile(genpkg string, root *httpdesign.RootExpr, svc *httpdesign.
 		{Path: genpkg + "/" + codegen.SnakeCase(svc.Name()), Name: data.Service.PkgName},
 	}
 
-	if svc.Tracing() != nil {
+	if svc.Traced {
 		imports = append(imports, &codegen.ImportSpec{
 			Path: "github.com/opentracing/opentracing-go",
 			Name: "opentracing"})
@@ -113,6 +113,11 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 	traced := false
 	tracingEndpoint := ""
 
+	if svr.Tracing != nil {
+		traced = true
+		tracingEndpoint = svr.Tracing.Endpoint
+	}
+
 	for _, svc := range root.HTTPServices {
 		pkgName := HTTPServices.Get(svc.Name()).Service.PkgName
 		specs = append(specs, &codegen.ImportSpec{
@@ -123,11 +128,6 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 			Path: path.Join(genpkg, codegen.SnakeCase(svc.Name())),
 			Name: pkgName,
 		})
-
-		if svc.Tracing() != nil {
-			traced = true
-			tracingEndpoint = svc.Tracing().Endpoint
-		}
 	}
 
 	if traced {

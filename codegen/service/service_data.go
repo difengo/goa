@@ -67,8 +67,6 @@ type (
 		Scope *codegen.NameScope
 		// Traced defines if the service is traced
 		Traced bool
-		// TracingEndpoint defines the host used to send the traces to
-		TracingEndpoint string
 	}
 
 	// ErrorInitData describes an error returned by a service method of type
@@ -545,13 +543,11 @@ func (d ServicesData) analyze(service *design.ServiceExpr) *Data {
 	}
 
 	var (
-		traced          bool
-		tracingEndpoint string
+		traced bool
 	)
 	{
-		if service.Tracing != nil {
+		if service.Traced {
 			traced = true
-			tracingEndpoint = service.Tracing.Endpoint
 		}
 	}
 
@@ -571,7 +567,6 @@ func (d ServicesData) analyze(service *design.ServiceExpr) *Data {
 		ViewedResultTypes: viewedRTs,
 		Scope:             scope,
 		Traced:            traced,
-		TracingEndpoint:   tracingEndpoint,
 	}
 	d[service.Name] = data
 
