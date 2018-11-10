@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -9,72 +10,62 @@ import (
 	"goa.design/goa/design"
 )
 
-// AuthFuncsFile returns a file that contains a dummy implementation of the
+// AuthFuncFiles returns the files that contain a dummy implementation of the
 // authorization functions needed to instantiate the service endpoints.
-func AuthFuncsFile(genpkg string, root *design.RootExpr) *codegen.File {
-	var (
-		apiPkg   = strings.ToLower(codegen.Goify(root.API.Name, false))
-		rootPath = "."
-		filepath = "auth.go"
-	)
-	{
-		if _, err := os.Stat(filepath); !os.IsNotExist(err) {
-			return nil // file already exists, skip it.
-		}
-		idx := strings.LastIndex(genpkg, string(os.PathSeparator))
-		if idx > 0 {
-			rootPath = genpkg[:idx]
-		}
-	}
-
-	var (
-		sections []*codegen.SectionTemplate
-		generate bool
-	)
-	{
-		specs := []*codegen.ImportSpec{
-			{Path: "context"},
-			{Path: "fmt"},
-			{Path: "goa.design/goa", Name: "goa"},
-			{Path: "goa.design/goa/security"},
-			{Path: rootPath, Name: apiPkg},
-		}
-		for _, svc := range root.Services {
+func AuthFuncFiles(genpkg string, root *design.RootExpr) []*codegen.File {
+	var result []*codegen.File
+	apiPkg := strings.ToLower(codegen.Goify(root.API.Name, false))
+	rootPath := "."
+	for _, s := range root.Services {
+		svc := Services.Get(s.Name)
+		if len(svc.Schemes) > 0 {
+			var sections []*codegen.SectionTemplate
+			specs := []*codegen.ImportSpec{
+				{Path: "context"},
+				{Path: "fmt"},
+				{Path: "goa.design/goa", Name: "goa"},
+				{Path: "goa.design/goa/security"},
+				{Path: rootPath, Name: apiPkg},
+			}
 			pkgName := Services.Get(svc.Name).PkgName
 			specs = append(specs, &codegen.ImportSpec{
 				Path: path.Join(genpkg, codegen.SnakeCase(svc.Name)),
 				Name: pkgName,
 			})
-		}
-		header := codegen.Header("", apiPkg, specs)
-		sections = []*codegen.SectionTemplate{header}
-		for _, s := range root.Services {
-			svc := Services.Get(s.Name)
-			if len(svc.Schemes) > 0 {
-				generate = true
-				sections = append(sections, &codegen.SectionTemplate{
-					Name:   "security-authfuncs",
-					Source: dummyAuthFuncsT,
-					Data:   svc,
+			header := codegen.Header("", apiPkg, specs)
+			sections = []*codegen.SectionTemplate{header}
+
+			for _, sch := range svc.Schemes {
+				data := map[string]interface{}{
+					"Scheme":  sch,
+					"Service": svc,
+				}
+				schemeType := strings.ToLower(sch.Type)
+				path := fmt.Sprintf("%s_%sauth.go", codegen.SnakeCase(svc.Name), schemeType)
+				if _, err := os.Stat(path); !os.IsNotExist(err) {
+					break // file already exists, skip it.
+				}
+				schemeSections := append(sections, &codegen.SectionTemplate{
+					Name:   fmt.Sprintf("security-authfunc-%s", schemeType),
+					Source: dummyAuthFuncT,
+					Data:   data,
+				})
+				result = append(result, &codegen.File{
+					Path:             path,
+					SectionTemplates: schemeSections,
+					SkipExist:        true,
 				})
 			}
 		}
 	}
-	if len(sections) == 0 || !generate {
-		return nil
-	}
 
-	return &codegen.File{
-		Path:             filepath,
-		SectionTemplates: sections,
-		SkipExist:        true,
-	}
+	return result
 }
 
-// data: Data
-const dummyAuthFuncsT = `{{ range .Schemes }}
-{{ printf "%s%sAuth implements the authorization logic for service %q for the %q security scheme." $.StructName .Type $.Name .SchemeName | comment }}
-func {{ $.StructName }}{{ .Type }}Auth(ctx context.Context, {{ if eq .Type "Basic" }}user, pass{{ else if eq .Type "APIKey" }}key{{ else }}token{{ end }} string, s *security.{{ .Type }}Scheme) (context.Context, error) {
+// input: SchemeData
+const dummyAuthFuncT = `
+{{ printf "%s%sAuth implements the authorization logic for service %q for the %q security scheme." .Service.StructName .Scheme.Type .Service.Name .Scheme.Type | comment }}
+func {{ .Service.StructName }}{{ .Scheme.Type }}Auth(ctx context.Context, {{ if eq .Scheme.Type "Basic" }}user, pass{{ else if eq .Scheme.Type "APIKey" }}key{{ else }}token{{ end }} string, s *security.{{ .Scheme.Type }}Scheme) (context.Context, error) {
 	//
 	// TBD: add authorization logic.
 	//
@@ -91,5 +82,4 @@ func {{ $.StructName }}{{ .Type }}Auth(ctx context.Context, {{ if eq .Type "Basi
 	//
 	return ctx, fmt.Errorf("not implemented")
 }
-{{- end }}
 `

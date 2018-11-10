@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"path"
@@ -17,9 +18,9 @@ import (
 func ExampleServerFiles(genpkg string, root *httpdesign.RootExpr) []*codegen.File {
 	var fw []*codegen.File
 	for _, svc := range root.HTTPServices {
-		f := dummyServiceFile(genpkg, root, svc)
-		if f != nil {
-			fw = append(fw, f)
+		df := dummyServiceFiles(genpkg, root, svc)
+		if df != nil {
+			fw = append(fw, df...)
 		}
 	}
 	for _, svr := range root.Design.API.Servers {
@@ -30,51 +31,68 @@ func ExampleServerFiles(genpkg string, root *httpdesign.RootExpr) []*codegen.Fil
 	return fw
 }
 
-// dummyServiceFile returns a dummy implementation of the given service.
-func dummyServiceFile(genpkg string, root *httpdesign.RootExpr, svc *httpdesign.ServiceExpr) *codegen.File {
-	path := codegen.SnakeCase(svc.Name()) + ".go"
+// dummyServiceFiles returns a dummy implementation of the given service.
+func dummyServiceFiles(genpkg string, root *httpdesign.RootExpr, svc *httpdesign.ServiceExpr) []*codegen.File {
+	var result []*codegen.File
 	data := HTTPServices.Get(svc.Name())
 	apiPkg := strings.ToLower(codegen.Goify(root.Design.API.Name, false))
-	sections := []*codegen.SectionTemplate{
-		codegen.Header("", apiPkg, []*codegen.ImportSpec{
-			{Path: "context"},
-			{Path: "log"},
-			{Path: "mime/multipart"},
-			{Path: genpkg + "/" + codegen.SnakeCase(svc.Name()), Name: data.Service.PkgName},
-		}),
+	imports := []*codegen.ImportSpec{
+		{Path: "context"},
+		{Path: "log"},
+		{Path: "mime/multipart"},
+		{Path: genpkg + "/" + codegen.SnakeCase(svc.Name()), Name: data.Service.PkgName},
+	}
+
+	// Service file
+	servicePath := codegen.SnakeCase(svc.Name()) + ".go"
+	serviceSections := []*codegen.SectionTemplate{
+		codegen.Header("", apiPkg, imports),
 		{
 			Name:   "dummy-service",
 			Source: dummyServiceStructT,
 			Data:   data,
 		},
 	}
+
+	result = append(result, &codegen.File{
+		Path:             servicePath,
+		SectionTemplates: serviceSections,
+		SkipExist:        true,
+	})
+
+	// Endpoints files
 	for _, e := range data.Endpoints {
-		sections = append(sections, &codegen.SectionTemplate{
-			Name:   "dummy-endpoint",
-			Source: dummyEndpointImplT,
-			Data:   e,
-		})
+		endpointPath := fmt.Sprintf("%s_%s.go", codegen.SnakeCase(svc.Name()), strings.ToLower(e.Method.VarName))
+		endpointSections := []*codegen.SectionTemplate{
+			codegen.Header("", apiPkg, imports),
+			{
+				Name:   "dummy-endpoint",
+				Source: dummyEndpointImplT,
+				Data:   e,
+			},
+		}
 		if e.MultipartRequestDecoder != nil {
-			sections = append(sections, &codegen.SectionTemplate{
+			endpointSections = append(endpointSections, &codegen.SectionTemplate{
 				Name:   "dummy-multipart-request-decoder",
 				Source: dummyMultipartRequestDecoderImplT,
 				Data:   e.MultipartRequestDecoder,
 			})
 		}
 		if e.MultipartRequestEncoder != nil {
-			sections = append(sections, &codegen.SectionTemplate{
+			endpointSections = append(endpointSections, &codegen.SectionTemplate{
 				Name:   "dummy-multipart-request-encoder",
 				Source: dummyMultipartRequestEncoderImplT,
 				Data:   e.MultipartRequestEncoder,
 			})
 		}
+		result = append(result, &codegen.File{
+			Path:             endpointPath,
+			SectionTemplates: endpointSections,
+			SkipExist:        true,
+		})
 	}
 
-	return &codegen.File{
-		Path:             path,
-		SectionTemplates: sections,
-		SkipExist:        true,
-	}
+	return result
 }
 
 func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExpr) *codegen.File {
@@ -101,6 +119,7 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 		{Path: "github.com/gorilla/websocket"},
 		{Path: rootPath, Name: apiPkg},
 	}
+
 	for _, svc := range root.HTTPServices {
 		pkgName := HTTPServices.Get(svc.Name()).Service.PkgName
 		specs = append(specs, &codegen.ImportSpec{
@@ -112,6 +131,7 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 			Name: pkgName,
 		})
 	}
+
 	sections := []*codegen.SectionTemplate{codegen.Header("", "main", specs)}
 	svcdata := make([]*ServiceData, len(svr.Services))
 	for i, svc := range svr.Services {
@@ -127,9 +147,67 @@ func exampleMain(genpkg string, root *httpdesign.RootExpr, svr *design.ServerExp
 		"APIPkg":      apiPkg,
 		"DefaultHost": u.Host,
 	}
+
+	// Service Main sections
 	sections = append(sections, &codegen.SectionTemplate{
-		Name:    "service-main",
-		Source:  mainT,
+		Name:    "service-main-start",
+		Source:  mainStartT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-logger",
+		Source:  mainLoggerT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-struct",
+		Source:  mainStructT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-endpoints",
+		Source:  mainEndpointsT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-mux",
+		Source:  mainEncoderMuxT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-middleware",
+		Source:  mainMiddlewareT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-http",
+		Source:  mainHTTPT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-end",
+		Source:  mainEndT,
+		Data:    data,
+		FuncMap: map[string]interface{}{"needStream": needStream},
+	})
+
+	sections = append(sections, &codegen.SectionTemplate{
+		Name:    "service-main-errorhandler",
+		Source:  mainErrorHandlerT,
 		Data:    data,
 		FuncMap: map[string]interface{}{"needStream": needStream},
 	})
@@ -181,7 +259,7 @@ func (s *{{ .ServiceVarName }}Svc) {{ .Method.VarName }}(ctx context.Context{{ i
 	view = {{ printf "%q" .Result.View }}
 	{{- end }}
 {{- end }}
-	s.logger.Print("{{ .ServiceVarName }}.{{ .Method.Name }}")
+	s.logger.Print("{{ .ServiceVarName }}.{{ .Method.VarName }}")
 	return
 }
 `
@@ -202,8 +280,7 @@ func {{ .FuncName }}(mw *multipart.Writer, p {{ .Payload.Ref }}) error {
 }
 `
 
-// input: map[string]interface{}{"Services":[]ServiceData, "APIPkg": string, "DefaultHost": string}
-const mainT = `func main() {
+const mainStartT = `func main() {
 	// Define command line flags, add any other flag required to configure
 	// the service.
 	var (
@@ -211,19 +288,22 @@ const mainT = `func main() {
 		dbg  = flag.Bool("debug", false, "Log request and response bodies")
 	)
 	flag.Parse()
+`
 
+const mainLoggerT = `
 	// Setup logger and goa log adapter. Replace logger with your own using
-	// your log package of choice. The goa.design/middleware/logging/...
-	// packages define log adapters for common log packages.
+	// your log package of choice.
 	var (
-		adapter middleware.Logger
+		logAdapter middleware.Logger
 		logger *log.Logger
 	)
 	{
 		logger = log.New(os.Stderr, "[{{ .APIPkg }}] ", log.Ltime)
-		adapter = middleware.NewLogger(logger)
+		logAdapter = middleware.NewLogger(logger)
 	}
+`
 
+const mainStructT = `
 	// Create the structs that implement the services.
 	var (
 	{{- range .Services }}
@@ -239,7 +319,9 @@ const mainT = `func main() {
 		{{-  end }}
 	{{- end }}
 	}
+`
 
+const mainEndpointsT = `
 	// Wrap the services in endpoints that can be invoked from other
 	// services potentially running in different processes.
 	var (
@@ -252,11 +334,13 @@ const mainT = `func main() {
 	{
 	{{- range .Services }}{{ $svc := . }}
 		{{-  if .Endpoints }}
-		{{ .Service.VarName }}Endpoints = {{ .Service.PkgName }}.NewEndpoints({{ .Service.VarName }}Svc{{ range .Service.Schemes }}, {{ $.APIPkg }}.{{ $svc.Service.StructName }}{{ .Type }}Auth{{ end }})
+		{{ .Service.VarName }}Endpoints = {{ .Service.PkgName }}.NewEndpoints({{ .Service.VarName }}Svc)
 		{{-  end }}
 	{{- end }}
 	}
+`
 
+const mainEncoderMuxT = `
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
 	// Other encodings can be used by providing the corresponding functions,
@@ -299,8 +383,10 @@ const mainT = `func main() {
 	// Configure the mux.
 	{{- range .Services }}
 	{{ .Service.PkgName }}svr.Mount(mux{{ if .Endpoints }}, {{ .Service.VarName }}Server{{ end }})
-	{{- end }}
+	{{- end }} 
+`
 
+const mainMiddlewareT = `
 	// Wrap the multiplexer with additional middlewares. Middlewares mounted
 	// here apply to all the service endpoints.
 	var handler http.Handler = mux
@@ -308,10 +394,12 @@ const mainT = `func main() {
 		if *dbg {
 			handler = middleware.Debug(mux, os.Stdout)(handler)
 		}
-		handler = middleware.Log(adapter)(handler)
+		handler = middleware.Log(logAdapter)(handler)
 		handler = middleware.RequestID()(handler)
 	}
+`
 
+const mainHTTPT = `
 	// Create channel used by both the signal handler and server goroutines
 	// to notify the main goroutine when to stop the server.
 	errc := make(chan error)
@@ -340,7 +428,9 @@ const mainT = `func main() {
 		logger.Printf("listening on %s", *addr)
 		errc <- srv.ListenAndServe()
 	}()
+`
 
+const mainEndT = `
 	// Wait for signal.
 	logger.Printf("exiting (%v)", <-errc)
 
@@ -351,7 +441,9 @@ const mainT = `func main() {
 
 	logger.Println("exited")
 }
+`
 
+const mainErrorHandlerT = `
 // ErrorHandler returns a function that writes and logs the given error.
 // The function also writes and logs the error unique ID so that it's possible
 // to correlate.

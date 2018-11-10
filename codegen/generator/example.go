@@ -16,9 +16,9 @@ func Example(genpkg string, roots []eval.Root) ([]*codegen.File, error) {
 	for _, root := range roots {
 		switch r := root.(type) {
 		case *design.RootExpr:
-			f := service.AuthFuncsFile(genpkg, r)
-			if f != nil {
-				files = append(files, f)
+			af := service.AuthFuncFiles(genpkg, r)
+			if af != nil {
+				files = append(files, af...)
 			}
 		case *httpdesign.RootExpr:
 			files = append(files, httpcodegen.ExampleServerFiles(genpkg, r)...)
